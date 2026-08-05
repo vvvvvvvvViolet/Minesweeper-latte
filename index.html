@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <meta name="description" content="เกม Minesweeper เล่นบนเว็บ บันทึกเกมได้ ย้อนกลับตาที่เดินไปแล้วได้">
+  <meta name="theme-color" content="#c8a27a">
+  <title>Minesweeper Latte</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💣</text></svg>">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div class="app">
+    <header class="app__header">
+      <h1 class="app__title">Minesweeper <span>Latte</span></h1>
+      <p class="app__subtitle">กวาดทุ่นระเบิดแบบสบาย ๆ — บันทึกเกมได้ ย้อนกลับได้</p>
+    </header>
+
+    <section class="controls" aria-label="ตั้งค่าเกม">
+      <div class="controls__row">
+        <label class="field">
+          <span class="field__label">ระดับความยาก</span>
+          <select id="difficulty" class="field__input">
+            <option value="beginner">ง่าย · 9×9 · 10 ลูก</option>
+            <option value="intermediate">ปานกลาง · 16×16 · 40 ลูก</option>
+            <option value="expert">ยาก · 16×30 · 99 ลูก</option>
+            <option value="custom">กำหนดเอง</option>
+          </select>
+        </label>
+        <button type="button" id="new-btn" class="btn btn--primary">เกมใหม่</button>
+      </div>
+
+      <div class="controls__row custom" id="custom-fields" hidden>
+        <label class="field field--sm">
+          <span class="field__label">แถว</span>
+          <input type="number" id="custom-rows" class="field__input" value="12" min="5" max="30">
+        </label>
+        <label class="field field--sm">
+          <span class="field__label">คอลัมน์</span>
+          <input type="number" id="custom-cols" class="field__input" value="12" min="5" max="40">
+        </label>
+        <label class="field field--sm">
+          <span class="field__label">ระเบิด</span>
+          <input type="number" id="custom-mines" class="field__input" value="25" min="1" max="500">
+        </label>
+        <button type="button" id="custom-apply" class="btn btn--primary">สร้างกระดาน</button>
+      </div>
+    </section>
+
+    <section class="panel" aria-label="สถานะเกม">
+      <div class="panel__stat" title="จำนวนระเบิดที่ยังไม่ได้ปักธง">
+        <span class="panel__icon" aria-hidden="true">💣</span>
+        <span class="panel__value" id="mine-count" aria-live="off">000</span>
+      </div>
+      <button type="button" id="status-face" class="face" title="เริ่มเกมใหม่" aria-label="เริ่มเกมใหม่">🙂</button>
+      <div class="panel__stat" title="เวลาที่ใช้ (วินาที)">
+        <span class="panel__icon" aria-hidden="true">⏱️</span>
+        <span class="panel__value" id="timer">000</span>
+      </div>
+    </section>
+
+    <section class="actions" aria-label="การกระทำ">
+      <button type="button" id="undo-btn" class="btn btn--accent" title="ย้อนกลับตาล่าสุด (Ctrl+Z)">
+        ↩︎ ย้อนกลับ <span id="undo-count" class="btn__badge"></span>
+      </button>
+      <button type="button" id="save-btn" class="btn" title="บันทึกเกม (Ctrl+S)">💾 บันทึก</button>
+      <button type="button" id="load-btn" class="btn" title="โหลดเกมที่บันทึกไว้">📂 โหลด</button>
+    </section>
+
+    <p class="message" id="message" role="status" aria-live="polite"></p>
+
+    <div class="board-wrap">
+      <div id="board" class="board" role="grid" tabindex="-1"></div>
+    </div>
+
+    <section class="best" aria-label="สถิติเวลาที่ดีที่สุด">
+      <span class="best__label">สถิติดีที่สุด</span>
+      <span class="best__values" id="best-times">—</span>
+    </section>
+
+    <section class="help">
+      <h2>วิธีเล่น</h2>
+      <ul>
+        <li><strong>คลิกซ้าย</strong> เปิดช่อง — ช่องแรกที่กดจะไม่มีระเบิดเสมอ</li>
+        <li><strong>คลิกขวา</strong> (หรือ <strong>กดค้าง</strong> บนมือถือ) ปักธง 🚩</li>
+        <li><strong>ดับเบิลคลิก</strong> หรือคลิกกลางบนตัวเลขที่ปักธงครบแล้ว เพื่อเปิดช่องรอบ ๆ พร้อมกัน</li>
+        <li><strong>ย้อนกลับ</strong> ถอยได้สูงสุด 40 ตา รวมถึงตาที่เหยียบระเบิด (ปุ่มลัด Ctrl+Z)</li>
+        <li><strong>บันทึก</strong> เก็บได้ 3 ช่อง และเกมค้างจะถูกบันทึกอัตโนมัติเมื่อปิดหน้าเว็บ</li>
+        <li>ปุ่มลูกศรเลื่อนช่อง, <strong>Enter/Space</strong> เปิดช่อง, <strong>F</strong> ปักธง</li>
+      </ul>
+      <p class="help__note">หมายเหตุ: เกมที่ใช้ปุ่มย้อนกลับจะไม่ถูกบันทึกเป็นสถิติเวลา</p>
+    </section>
+  </div>
+
+  <div class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" hidden>
+    <div class="modal__box">
+      <div class="modal__head">
+        <h2 class="modal__title" id="modal-title">บันทึกเกม</h2>
+        <button type="button" class="modal__close" id="modal-close" aria-label="ปิด">✕</button>
+      </div>
+      <div class="modal__slots" id="modal-slots"></div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="js/game.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
