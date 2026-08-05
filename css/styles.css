@@ -1,0 +1,823 @@
+/* Minesweeper Latte - a warm, coffee-toned take on the classic. */
+
+:root {
+  --bg: #f5ece1;
+  --bg-soft: #fffaf4;
+  --ink: #3c2f28;
+  --ink-soft: #7b6a5d;
+  --crema: #e6d3bd;
+  --crema-dark: #cbb098;
+  --espresso: #6f4e37;
+  --accent: #c07a4a;
+  --danger: #c0453c;
+  --ok: #4f7a4a;
+  --line: rgba(111, 78, 55, .18);
+  --shadow: 0 10px 30px rgba(90, 62, 42, .12);
+  --radius: 14px;
+  --cell: 34px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #221b17;
+    --bg-soft: #2d2420;
+    --ink: #f2e7dc;
+    --ink-soft: #b6a294;
+    --crema: #4a3a30;
+    --crema-dark: #3a2d25;
+    --espresso: #d9b48f;
+    --accent: #d68e5c;
+    --line: rgba(242, 231, 220, .14);
+    --shadow: 0 10px 30px rgba(0, 0, 0, .35);
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 24px 16px 48px;
+  /* Respect notches and the home indicator when installed to a home screen. */
+  padding-left: max(16px, env(safe-area-inset-left));
+  padding-right: max(16px, env(safe-area-inset-right));
+  background: radial-gradient(1200px 600px at 50% -10%, var(--bg-soft), var(--bg));
+  background-attachment: fixed;
+  color: var(--ink);
+  font-family: "Noto Sans Thai", "Segoe UI", system-ui, -apple-system, sans-serif;
+  line-height: 1.5;
+  min-height: 100vh;
+  min-height: 100dvh;
+  /* Stop pull-to-refresh from firing mid-game on a horizontal board drag. */
+  overscroll-behavior-y: contain;
+}
+
+.app {
+  max-width: 960px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ------------------------------------------------------------- header */
+
+.app__header { text-align: center; }
+
+.app__title {
+  margin: 0;
+  font-size: clamp(28px, 5vw, 40px);
+  letter-spacing: -.5px;
+}
+
+.app__title span { color: var(--accent); }
+
+.app__subtitle {
+  margin: 4px 0 0;
+  color: var(--ink-soft);
+  font-size: 15px;
+}
+
+/* ----------------------------------------------------------- controls */
+
+.controls,
+.panel,
+.actionbar,
+.best,
+.help {
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 14px 16px;
+}
+
+.controls__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.controls__row + .controls__row { margin-top: 12px; }
+
+/* A class-level `display` would otherwise beat the browser's [hidden] rule. */
+.controls__row[hidden] { display: none; }
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1 1 200px;
+}
+
+.field--sm {
+  flex: 0 1 120px;
+  max-width: 140px;
+}
+
+.field__label {
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.field__input {
+  font: inherit;
+  color: inherit;
+  padding: 9px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  min-width: 0;
+}
+
+.field__input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* ------------------------------------------------------------ buttons */
+
+.btn {
+  font: inherit;
+  font-weight: 600;
+  color: var(--ink);
+  background: var(--crema);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 16px;
+  cursor: pointer;
+  transition: transform .08s ease, filter .15s ease;
+  white-space: nowrap;
+}
+
+.btn:hover:not(:disabled) { filter: brightness(1.05); }
+.btn:active:not(:disabled) { transform: translateY(1px); }
+
+.btn:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+.btn--primary {
+  background: var(--espresso);
+  color: #fff8f0;
+  border-color: transparent;
+}
+
+@media (prefers-color-scheme: dark) {
+  .btn--primary { color: #2a201a; }
+}
+
+.btn--accent {
+  background: var(--accent);
+  color: #fff8f0;
+  border-color: transparent;
+}
+
+.btn--ghost {
+  background: transparent;
+  color: var(--ink-soft);
+}
+
+.btn__badge {
+  font-size: 12px;
+  opacity: .8;
+  font-variant-numeric: tabular-nums;
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* -------------------------------------------------------------- panel */
+
+.panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.panel__stat {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--crema-dark);
+  border-radius: 10px;
+  padding: 6px 14px;
+}
+
+.panel__value {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 22px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.face {
+  font-size: 30px;
+  line-height: 1;
+  background: var(--crema);
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  width: 54px;
+  height: 54px;
+  cursor: pointer;
+  transition: transform .1s ease;
+}
+
+.face:hover { transform: scale(1.06); }
+.face:active { transform: scale(.96); }
+
+/* ---------------------------------------------------------- action bar */
+
+.actionbar {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  justify-content: center;
+}
+
+.mode {
+  display: flex;
+  gap: 4px;
+  background: var(--crema-dark);
+  border-radius: 12px;
+  padding: 4px;
+}
+
+.mode__btn {
+  font: inherit;
+  font-weight: 600;
+  color: var(--ink-soft);
+  background: transparent;
+  border: none;
+  border-radius: 9px;
+  padding: 8px 16px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mode__btn.is-active {
+  background: var(--bg-soft);
+  color: var(--ink);
+  box-shadow: 0 1px 4px rgba(90, 62, 42, .18);
+}
+
+.mode__icon { font-size: 19px; line-height: 1; }
+
+.actionbar__btn {
+  font: inherit;
+  font-weight: 600;
+  color: var(--ink);
+  background: var(--crema);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 8px 18px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: transform .08s ease, filter .15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.actionbar__btn:hover:not(:disabled) { filter: brightness(1.05); }
+.actionbar__btn:active:not(:disabled) { transform: translateY(1px); }
+
+.actionbar__btn:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+#undo-btn:not(:disabled) {
+  background: var(--accent);
+  color: #fff8f0;
+  border-color: transparent;
+}
+
+.actionbar__icon { font-size: 18px; line-height: 1; }
+
+.actionbar__badge {
+  font-size: 12px;
+  font-weight: 600;
+  opacity: .85;
+  font-variant-numeric: tabular-nums;
+  margin-left: 4px;
+}
+
+.mode__btn:focus-visible,
+.actionbar__btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.message {
+  margin: 0;
+  text-align: center;
+  color: var(--ink-soft);
+  font-size: 14px;
+  min-height: 21px;
+}
+
+/* -------------------------------------------------------------- board */
+
+/*
+ * Centring an overflowing child with `justify-content: center` makes its
+ * leading edge unreachable by scrolling, so wide boards lose their first
+ * columns. Auto margins centre when there is room and collapse to 0 when
+ * there is not, which scrolls correctly.
+ */
+.board-wrap {
+  overflow-x: auto;
+  padding: 4px;
+  /* Keep a sideways board drag from triggering browser back-swipe. */
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.board {
+  --cols: 9;
+  width: max-content;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(var(--cols), var(--cell));
+  gap: 3px;
+  padding: 10px;
+  background: var(--crema-dark);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  touch-action: manipulation;
+}
+
+/* Boards wider than 20 columns shrink a little so more fits on screen. */
+.board--wide { --cell: 28px; }
+
+.cell {
+  width: var(--cell);
+  height: var(--cell);
+  padding: 0;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: calc(var(--cell) * .5);
+  font-weight: 700;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 6px;
+  background: linear-gradient(160deg, var(--crema), var(--crema-dark));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .35);
+  color: var(--ink);
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  /* Without this, a long press opens iOS's text/callout menu instead of flagging. */
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: background .12s ease, transform .06s ease;
+}
+
+/* While flag mode is on, hidden cells clearly show what a tap will do. */
+.board.is-flagmode .cell:not(.is-revealed) {
+  background: linear-gradient(160deg, #edc399, #d59a5e);
+  box-shadow: inset 0 0 0 1.5px rgba(160, 92, 42, .45);
+}
+
+@media (prefers-color-scheme: dark) {
+  .board.is-flagmode .cell:not(.is-revealed) {
+    background: linear-gradient(160deg, #7a5230, #533620);
+    box-shadow: inset 0 0 0 1.5px rgba(214, 142, 92, .5);
+  }
+}
+
+.cell:hover:not(.is-revealed) { filter: brightness(1.07); }
+.cell:active:not(.is-revealed) { transform: scale(.94); }
+
+.cell:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  z-index: 1;
+}
+
+.cell.is-revealed {
+  background: var(--bg-soft);
+  box-shadow: inset 0 0 0 1px var(--line);
+  cursor: default;
+}
+
+.cell.is-flagged { background: linear-gradient(160deg, #e8c9a8, #d7ac85); }
+.cell.is-wrong { background: #e8b3ae; }
+
+.cell.is-mine {
+  background: #efc9c6;
+  color: #4a201d;
+}
+
+.cell.is-exploded {
+  background: var(--danger);
+  animation: boom .4s ease;
+}
+
+@keyframes boom {
+  0% { transform: scale(.6); }
+  60% { transform: scale(1.15); }
+  100% { transform: scale(1); }
+}
+
+.board.is-over .cell:not(.is-revealed) { cursor: default; }
+
+.cell.n1 { color: #2f6bd8; }
+.cell.n2 { color: #3f8b4a; }
+.cell.n3 { color: #cf4a3f; }
+.cell.n4 { color: #6b3fa0; }
+.cell.n5 { color: #9a5a1f; }
+.cell.n6 { color: #1f8a8a; }
+.cell.n7 { color: #5a4636; }
+.cell.n8 { color: #8a8a8a; }
+
+@media (prefers-color-scheme: dark) {
+  .cell.n1 { color: #7fb0ff; }
+  .cell.n2 { color: #86d492; }
+  .cell.n3 { color: #ff9187; }
+  .cell.n4 { color: #c4a2ff; }
+  .cell.n5 { color: #e8b06a; }
+  .cell.n6 { color: #6fd8d8; }
+  .cell.n7 { color: #d8c4b0; }
+  .cell.n8 { color: #b8b8b8; }
+  .cell.is-mine { background: #6b3330; color: #ffe3e0; }
+  .cell.is-flagged { background: linear-gradient(160deg, #5c4530, #4a3626); }
+  .cell.is-wrong { background: #7a3a35; }
+}
+
+/* --------------------------------------------------------------- best */
+
+.best {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+  align-items: center;
+  font-size: 14px;
+}
+
+.best__label {
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+
+.best__values {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.best__item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  background: var(--crema);
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 3px 12px;
+}
+
+.best__item.is-current {
+  border-color: var(--accent);
+  background: var(--bg);
+}
+
+.best__name {
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+
+/* --------------------------------------------------------------- help */
+
+.help__summary {
+  font-size: 17px;
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+}
+
+.help__summary::-webkit-details-marker { display: none; }
+
+.help__summary::before {
+  content: '▸';
+  color: var(--accent);
+  transition: transform .15s ease;
+}
+
+.help[open] .help__summary::before { transform: rotate(90deg); }
+
+.help__list {
+  margin: 10px 0 0;
+  padding-left: 20px;
+  color: var(--ink-soft);
+  font-size: 14px;
+}
+
+.help li + li { margin-top: 4px; }
+
+.help__note {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: var(--ink-soft);
+  opacity: .85;
+}
+
+/* -------------------------------------------------------------- modal */
+
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(40, 26, 18, .5);
+  backdrop-filter: blur(3px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 20;
+}
+
+.modal[hidden] { display: none; }
+
+.modal__box {
+  background: var(--bg-soft);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  width: min(520px, 100%);
+  max-height: 85vh;
+  overflow: auto;
+  padding: 18px;
+}
+
+.modal__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.modal__title { margin: 0; font-size: 20px; }
+
+.modal__close {
+  font: inherit;
+  background: transparent;
+  border: none;
+  color: var(--ink-soft);
+  font-size: 20px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 8px;
+}
+
+.modal__close:hover { background: var(--crema); }
+
+.modal__slots {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.modal__warning {
+  margin: 0;
+  font-size: 13px;
+  color: var(--danger);
+}
+
+.slot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px;
+  background: var(--bg);
+}
+
+.slot__info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.slot__info span {
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.slot__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.slot__actions .btn {
+  padding: 7px 12px;
+  font-size: 14px;
+}
+
+/* -------------------------------------------------------------- toast */
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translate(-50%, 20px);
+  background: var(--espresso);
+  color: #fff8f0;
+  padding: 10px 18px;
+  border-radius: 999px;
+  box-shadow: var(--shadow);
+  font-size: 14px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .2s ease, transform .2s ease;
+  z-index: 30;
+}
+
+@media (prefers-color-scheme: dark) {
+  .toast { color: #2a201a; }
+}
+
+.toast.is-visible {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+/* --------------------------------------------------------- responsive */
+
+/*
+ * The markup is ordered for phones (board near the top, controls below).
+ * On wider screens everything fits at once, so restore the roomier layout.
+ */
+@media (min-width: 721px) {
+  .app__header { order: 1; }
+  .controls { order: 2; }
+  .panel { order: 3; }
+  .actionbar { order: 4; }
+  .message { order: 5; }
+  .board-wrap { order: 6; }
+  .best { order: 7; }
+  .help { order: 8; }
+}
+
+/*
+ * ------------------------------------------------------------- phones
+ * Also covers landscape phones, which are wider than the 720px breakpoint
+ * but far too short for the desktop layout.
+ */
+@media (max-width: 720px), (max-height: 520px) and (orientation: landscape) {
+  body {
+    padding: 12px 10px 16px;
+    padding-left: max(10px, env(safe-area-inset-left));
+    padding-right: max(10px, env(safe-area-inset-right));
+    /* Room for the fixed action bar plus the home indicator. */
+    padding-bottom: calc(84px + env(safe-area-inset-bottom));
+  }
+
+  .app { gap: 12px; }
+
+  /* Board first: everything else can wait below the fold. */
+  .app__header { order: 1; }
+  .panel { order: 2; }
+  .message { order: 3; }
+  .board-wrap { order: 4; }
+  .controls { order: 6; }
+  .best { order: 7; }
+  .help { order: 8; }
+
+  .app__title { font-size: 26px; }
+  .app__subtitle { display: none; }
+
+  /* Mine count and timer stay visible while scrolling a tall board. */
+  .panel {
+    order: 2;
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    padding: 8px 12px;
+  }
+
+  .face { width: 48px; height: 48px; font-size: 26px; }
+  .panel__stat { padding: 5px 12px; }
+  .panel__value { font-size: 20px; }
+
+  /*
+   * Fit the board to the screen when it can, and never shrink cells below a
+   * comfortable tap target -- wider boards scroll sideways instead.
+   */
+  .board {
+    --cell: clamp(26px, calc((100vw - 44px - (var(--cols) - 1) * 3px) / var(--cols)), 34px);
+    padding: 8px;
+  }
+
+  /* The clamp above already handles wide boards on small screens. */
+  .board--wide { --cell: clamp(26px, calc((100vw - 44px - (var(--cols) - 1) * 3px) / var(--cols)), 34px); }
+
+  /* Thumb zone: pinned to the bottom of the screen. */
+  .actionbar {
+    order: 5;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 10;
+    border-radius: 16px 16px 0 0;
+    border-bottom: none;
+    gap: 6px;
+    padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
+    padding-left: max(10px, env(safe-area-inset-left));
+    padding-right: max(10px, env(safe-area-inset-right));
+  }
+
+  .mode { flex: 1.6 1 0; padding: 3px; }
+
+  .mode__btn {
+    flex: 1 1 0;
+    flex-direction: column;
+    gap: 1px;
+    padding: 4px 6px;
+    min-height: 50px;
+  }
+
+  .mode__label { font-size: 11px; }
+
+  .actionbar__btn {
+    flex: 1 1 0;
+    flex-direction: column;
+    gap: 1px;
+    padding: 4px 6px;
+    min-height: 56px;
+  }
+
+  .actionbar__label { font-size: 11px; font-weight: 600; }
+  .actionbar__icon { font-size: 20px; }
+  .actionbar__badge { margin-left: 2px; }
+
+  .toast { bottom: calc(84px + env(safe-area-inset-bottom)); }
+
+  .modal__box { max-height: 80vh; }
+  .slot { flex-wrap: nowrap; }
+  .slot__actions .btn { min-height: 44px; }
+}
+
+@media (max-width: 480px) {
+  .board { gap: 2px; padding: 6px; }
+  .board,
+  .board--wide {
+    --cell: clamp(26px, calc((100vw - 36px - (var(--cols) - 1) * 2px) / var(--cols)), 34px);
+  }
+  .controls__row { gap: 8px; }
+  .field--sm { flex: 1 1 80px; max-width: none; }
+}
+
+/* Landscape phones are short: spend the vertical space on the board. */
+@media (max-height: 520px) and (orientation: landscape) {
+  .app__header { display: none; }
+  .app { gap: 8px; }
+  body { padding-top: 8px; }
+
+  .panel { padding: 4px 10px; }
+  .face { width: 40px; height: 40px; font-size: 22px; }
+  .panel__value { font-size: 18px; }
+  .message { display: none; }
+
+  .actionbar { padding-top: 5px; padding-bottom: calc(5px + env(safe-area-inset-bottom)); }
+  .mode__btn { min-height: 42px; }
+  .actionbar__btn { min-height: 46px; }
+  body { padding-bottom: calc(66px + env(safe-area-inset-bottom)); }
+
+  /* Height is the scarce axis here, so size cells against both. */
+  .board,
+  .board--wide {
+    --cell: clamp(24px, min(
+      calc((100vw - 44px - (var(--cols) - 1) * 3px) / var(--cols)),
+      calc((100vh - 160px - (var(--rows) - 1) * 3px) / var(--rows))
+    ), 34px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
