@@ -17,6 +17,12 @@ const TYPES = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascrip
 
 let pass = 0;
 let fail = 0;
+
+/** Parses the on-screen m:ss clock back into seconds. */
+function clockSeconds(text) {
+  const m = /^(\d+):([0-5]\d)$/.exec(text.trim());
+  return m ? Number(m[1]) * 60 + Number(m[2]) : NaN;
+}
 function check(name, cond) {
   if (cond) { pass++; console.log('  ok   ' + name); }
   else { fail++; console.log('  FAIL ' + name); }
@@ -78,9 +84,11 @@ function serve() {
   check('undo enabled after a move', !(await page.locator('#undo-btn').isDisabled()));
   check('undo badge shows 1', (await page.locator('#undo-count').textContent()).includes('1'));
 
+  check('the clock reads as m:ss', /^\d+:[0-5]\d$/.test(await page.locator('#timer').textContent()));
   const t0 = await page.locator('#timer').textContent();
   await page.waitForTimeout(1300);
-  check('timer counts up while playing', Number(await page.locator('#timer').textContent()) > Number(t0));
+  check('timer counts up while playing',
+    clockSeconds(await page.locator('#timer').textContent()) > clockSeconds(t0));
 
   await page.locator('.cell:not(.is-revealed)').first().click({ button: 'right' });
   await page.waitForTimeout(100);
@@ -125,7 +133,7 @@ function serve() {
   await page.selectOption('#difficulty', 'intermediate');
   await page.waitForTimeout(150);
   check('switching difficulty rebuilds the board', (await page.locator('.cell').count()) === 256);
-  check('a new game resets the timer', (await page.locator('#timer').textContent()) === '000');
+  check('a new game resets the timer', (await page.locator('#timer').textContent()) === '0:00');
 
   await page.locator('#load-btn').click();
   await page.waitForSelector('#modal:not([hidden])');
@@ -168,7 +176,28 @@ function serve() {
   check('the message mentions the undo count', (await page.locator('#message').textContent()).includes('ย้อนกลับ'));
   await page.waitForTimeout(1200);
   check('timer resumes after undoing a loss',
-    Number(await page.locator('#timer').textContent()) > Number(timerAtLoss));
+    clockSeconds(await page.locator('#timer').textContent()) > clockSeconds(timerAtLoss));
+
+  /* ------------------------------------------------------------- clock */
+  console.log('\nclock');
+  // A three-digit counter clamped at 999, so anything past 16m39s froze.
+  const longClock = await page.evaluate(() => {
+    const results = {};
+    for (const [label, seconds] of Object.entries({
+      zero: 0, under: 59, oneMin: 60, wasClamped: 999, past: 1000, longGame: 3725
+    })) {
+      const app = window.MinesweeperApp;
+      app.setElapsedForTest(seconds * 1000);
+      results[label] = document.getElementById('timer').textContent;
+    }
+    return results;
+  });
+  check('0 seconds shows 0:00', longClock.zero === '0:00');
+  check('59 seconds shows 0:59', longClock.under === '0:59');
+  check('60 seconds rolls to 1:00', longClock.oneMin === '1:00');
+  check('999 seconds shows 16:39', longClock.wasClamped === '16:39');
+  check('the clock keeps counting past 999 seconds', longClock.past === '16:40');
+  check('an hour-long game reads 62:05', longClock.longGame === '62:05');
 
   /* --------------------------------------------------- all five levels */
   console.log('\ndifficulty levels');
@@ -271,6 +300,57 @@ function serve() {
   check('winning shows the cool face', (await page.locator('#status-face').textContent()) === '😎');
   check('the win message is shown', (await page.locator('#message').textContent()).includes('ชนะ'));
   check('winning auto-flags the remaining mines', (await page.locator('#mine-count').textContent()) === '000');
+
+  /* ------------------------------------------------------ accessibility */
+  console.log('\naccessibility');
+  await page.selectOption('#difficulty', 'beginner');
+  await page.waitForTimeout(200);
+
+  // role="grid" requires grid > row > gridcell. The rows use display:contents,
+  // so this also proves they still reach the accessibility tree.
+  check('the board exposes the grid role', (await page.getByRole('grid').count()) === 1);
+  check('every board row is exposed as a row', (await page.getByRole('row').count()) === 9);
+  check('every cell is exposed as a gridcell', (await page.getByRole('gridcell').count()) === 81);
+  check('gridcells are children of rows', await page.evaluate(() =>
+    [...document.querySelectorAll('[role="gridcell"]')]
+      .every((c) => c.parentElement.getAttribute('role') === 'row')));
+  check('rows are children of the grid', await page.evaluate(() =>
+    [...document.querySelectorAll('[role="row"]')]
+      .every((r) => r.parentElement.id === 'board')));
+  check('rows and columns are indexed', await page.evaluate(() => {
+    const firstRow = document.querySelector('[role="row"]');
+    const cells = firstRow.querySelectorAll('[role="gridcell"]');
+    return firstRow.getAttribute('aria-rowindex') === '1' &&
+      cells[0].getAttribute('aria-colindex') === '1' &&
+      cells[8].getAttribute('aria-colindex') === '9';
+  }));
+  check('the grid declares its dimensions', await page.evaluate(() => {
+    const b = document.getElementById('board');
+    return b.getAttribute('aria-rowcount') === '9' && b.getAttribute('aria-colcount') === '9';
+  }));
+
+  // The row wrappers must not disturb the CSS grid.
+  const grid = await page.evaluate(() => {
+    const cells = [...document.querySelectorAll('.cell')].map((c) => c.getBoundingClientRect());
+    return {
+      firstRowSameTop: cells.slice(0, 9).every((r) => Math.abs(r.top - cells[0].top) < 1),
+      firstColSameLeft: [0, 9, 18, 27].every((i) => Math.abs(cells[i].left - cells[0].left) < 1),
+      wrapsAfterNineCells: cells[9].top > cells[8].top,
+      rowBoxesHaveNoSize: [...document.querySelectorAll('.board__row')]
+        .every((r) => r.getBoundingClientRect().width === 0)
+    };
+  });
+  check('cells in a row still share a top edge', grid.firstRowSameTop);
+  check('cells in a column still share a left edge', grid.firstColSameLeft);
+  check('the grid still wraps every 9 cells', grid.wrapsAfterNineCells);
+  check('row wrappers generate no layout box', grid.rowBoxesHaveNoSize);
+
+  // Keyboard navigation must survive the extra DOM level.
+  await page.locator('.cell').first().focus();
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('ArrowRight');
+  check('arrow keys still cross row boundaries', await page.evaluate(() =>
+    document.activeElement.dataset.index === '10'));
 
   /* -------------------------------------------------------------- modal */
   console.log('\nslot management');
