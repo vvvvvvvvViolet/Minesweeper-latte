@@ -17,7 +17,8 @@
   var undoUsed = 0;
   var timer = { accumulated: 0, startedAt: 0, running: false, handle: 0 };
   var pendingModalAction = null;
-  var touch = { timer: 0, index: -1, flagged: false, moved: false, startX: 0, startY: 0 };
+  var tapMode = 'dig'; // 'dig' | 'flag' — what a plain tap/click does
+  var touch = { timer: 0, index: -1, handled: false, moved: false, startX: 0, startY: 0 };
 
   document.addEventListener('DOMContentLoaded', init);
 
@@ -25,6 +26,12 @@
     cacheElements();
     populateDifficulties();
     bindEvents();
+    setTapMode('dig');
+    registerServiceWorker();
+
+    // The instructions are handy on a desktop, but they push the board off
+    // a phone screen, so collapse them there.
+    el.help.open = global.matchMedia ? global.matchMedia('(min-width: 721px)').matches : true;
 
     var auto = Storage.loadAuto();
     if (auto && auto.snapshot && !isFinished(auto.snapshot.status)) {
@@ -40,7 +47,8 @@
       'board', 'mine-count', 'timer', 'status-face', 'undo-btn', 'save-btn',
       'load-btn', 'new-btn', 'difficulty', 'custom-fields', 'custom-rows',
       'custom-cols', 'custom-mines', 'custom-apply', 'message', 'undo-count',
-      'modal', 'modal-title', 'modal-slots', 'modal-close', 'best-times', 'toast'
+      'modal', 'modal-title', 'modal-slots', 'modal-close', 'best-times', 'toast',
+      'mode-dig', 'mode-flag', 'help'
     ].forEach(function (id) {
       el[camel(id)] = document.getElementById(id);
     });
@@ -69,6 +77,9 @@
   }
 
   function bindEvents() {
+    el.modeDig.addEventListener('click', function () { setTapMode('dig'); });
+    el.modeFlag.addEventListener('click', function () { setTapMode('flag'); });
+
     el.newBtn.addEventListener('click', function () { startGame(el.difficulty.value); });
     el.statusFace.addEventListener('click', function () { startGame(el.difficulty.value); });
     el.undoBtn.addEventListener('click', undo);
@@ -98,6 +109,31 @@
 
     document.addEventListener('keydown', onGlobalKeyDown);
     global.addEventListener('beforeunload', autosave);
+  }
+
+  /** Registers the offline cache. Needs a secure context, so file:// opts out. */
+  function registerServiceWorker() {
+    if (!global.navigator || !global.navigator.serviceWorker) return;
+    if (global.location.protocol === 'file:' || !global.isSecureContext) return;
+    global.addEventListener('load', function () {
+      global.navigator.serviceWorker.register('sw.js').catch(function () {
+        // Offline support is a bonus; the game works fine without it.
+      });
+    });
+  }
+
+  /**
+   * Phones have no right-click, so a tap mode decides what a plain tap does.
+   * A long press always performs the other action.
+   */
+  function setTapMode(mode) {
+    tapMode = mode;
+    var digging = mode === 'dig';
+    el.modeDig.classList.toggle('is-active', digging);
+    el.modeFlag.classList.toggle('is-active', !digging);
+    el.modeDig.setAttribute('aria-pressed', String(digging));
+    el.modeFlag.setAttribute('aria-pressed', String(!digging));
+    el.board.classList.toggle('is-flagmode', !digging);
   }
 
   /* ---------------------------------------------------------------- game */
@@ -360,17 +396,27 @@
     return cell ? parseInt(cell.dataset.index, 10) : -1;
   }
 
-  function onBoardClick(e) {
-    if (touch.flagged) { touch.flagged = false; return; }
-    var idx = cellIndexFrom(e.target);
-    if (idx < 0) return;
+  /**
+   * A tap on a revealed number always chords; on a hidden cell the tap mode
+   * decides. `invert` swaps dig and flag, which is what a long press does.
+   */
+  function playCell(idx, invert) {
     var r = Math.floor(idx / game.cols);
     var c = idx % game.cols;
     if (game.cellState(idx) === MS.REVEALED) {
       act(function () { return game.chord(r, c); });
-    } else {
-      act(function () { return game.reveal(r, c); });
+      return;
     }
+    var flagging = (tapMode === 'flag') !== !!invert;
+    act(function () { return flagging ? game.toggleFlag(r, c) : game.reveal(r, c); });
+  }
+
+  function onBoardClick(e) {
+    // A long press already acted on this cell; swallow the click it produces.
+    if (touch.handled) { touch.handled = false; return; }
+    var idx = cellIndexFrom(e.target);
+    if (idx < 0) return;
+    playCell(idx, false);
   }
 
   function onBoardDblClick(e) {
@@ -406,8 +452,9 @@
     clearTimeout(touch.timer);
     touch.timer = setTimeout(function () {
       if (touch.moved || touch.index < 0) return;
-      touch.flagged = true;
-      act(function () { return game.toggleFlag(Math.floor(touch.index / game.cols), touch.index % game.cols); });
+      touch.handled = true;
+      // Long press does the opposite of the current tap mode.
+      playCell(touch.index, true);
       if (global.navigator && global.navigator.vibrate) global.navigator.vibrate(15);
     }, LONG_PRESS_MS);
   }
@@ -424,10 +471,10 @@
 
   function onTouchEnd(e) {
     clearTimeout(touch.timer);
-    if (touch.flagged) {
+    if (touch.handled) {
       // Stop the browser from turning this long press into a click.
       e.preventDefault();
-      touch.flagged = false;
+      touch.handled = false;
     }
     touch.index = -1;
   }
@@ -435,7 +482,7 @@
   function cancelLongPress() {
     clearTimeout(touch.timer);
     touch.index = -1;
-    touch.flagged = false;
+    touch.handled = false;
   }
 
   function onBoardKeyDown(e) {
@@ -458,8 +505,7 @@
         return;
       case ' ': case 'Enter':
         e.preventDefault();
-        if (game.cellState(idx) === MS.REVEALED) act(function () { return game.chord(r, c); });
-        else act(function () { return game.reveal(r, c); });
+        playCell(idx, false);
         focusCell(idx);
         return;
       default:

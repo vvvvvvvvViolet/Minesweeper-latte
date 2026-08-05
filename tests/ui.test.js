@@ -337,6 +337,175 @@ function serve() {
   check('no uncaught errors on mobile', mobileErrors.length === 0);
   if (mobileErrors.length) console.log(mobileErrors.slice(0, 5));
 
+  /* --------------------------------------------------- mobile UI layout */
+  console.log('\nmobile layout');
+  await mp.selectOption('#difficulty', 'beginner');
+  await mp.waitForTimeout(200);
+
+  const layout = await mp.evaluate(() => {
+    const bar = document.querySelector('.actionbar').getBoundingClientRect();
+    const panel = document.querySelector('.panel');
+    const board = document.querySelector('#board').getBoundingClientRect();
+    const wrap = document.querySelector('.board-wrap').getBoundingClientRect();
+    return {
+      barBottom: Math.round(bar.bottom),
+      barTop: Math.round(bar.top),
+      viewportH: window.innerHeight,
+      barFixed: getComputedStyle(document.querySelector('.actionbar')).position === 'fixed',
+      panelSticky: getComputedStyle(panel).position === 'sticky',
+      boardAboveBar: board.top < bar.top,
+      beginnerFits: board.width <= wrap.width + 1,
+      helpCollapsed: !document.querySelector('#help').open
+    };
+  });
+  check('the action bar is pinned to the bottom on phones', layout.barFixed);
+  check('the action bar sits at the bottom edge of the viewport',
+    Math.abs(layout.barBottom - layout.viewportH) <= 1);
+  check('the status panel sticks to the top on phones', layout.panelSticky);
+  check('the board is above the action bar', layout.boardAboveBar);
+  check('a beginner board fits the phone width without scrolling', layout.beginnerFits);
+  check('the instructions start collapsed on phones', layout.helpCollapsed);
+
+  const targets = await mp.evaluate(() => {
+    const rects = [...document.querySelectorAll('.actionbar__btn, .mode__btn')]
+      .map((b) => b.getBoundingClientRect());
+    const cell = document.querySelector('.cell').getBoundingClientRect();
+    return {
+      minBtnHeight: Math.min(...rects.map((r) => r.height)),
+      minBtnWidth: Math.min(...rects.map((r) => r.width)),
+      cell: Math.round(cell.width)
+    };
+  });
+  check('every action-bar target is at least 44px tall', targets.minBtnHeight >= 44);
+  check('every action-bar target is at least 44px wide', targets.minBtnWidth >= 44);
+  check('cells stay tappable on a phone (>= 26px)', targets.cell >= 26);
+
+  // pinch-zoom must not be blocked (WCAG 1.4.4)
+  const viewportMeta = await mp.getAttribute('meta[name="viewport"]', 'content');
+  check('pinch zoom is not disabled', !/user-scalable\s*=\s*no|maximum-scale/.test(viewportMeta));
+  check('the viewport covers the display cutout', /viewport-fit=cover/.test(viewportMeta));
+
+  /* ------------------------------------------------------ tap-mode UX */
+  console.log('\ntap mode');
+  check('dig mode is active by default',
+    (await mp.locator('#mode-dig').getAttribute('aria-pressed')) === 'true');
+
+  await mp.locator('#mode-flag').click();
+  await mp.waitForTimeout(150);
+  check('flag mode becomes active when tapped',
+    (await mp.locator('#mode-flag').getAttribute('aria-pressed')) === 'true');
+  check('dig mode is released', (await mp.locator('#mode-dig').getAttribute('aria-pressed')) === 'false');
+  check('the board shows it is in flag mode',
+    await mp.locator('#board').evaluate((b) => b.classList.contains('is-flagmode')));
+
+  const flagCell = await mp.locator('.cell').nth(3).boundingBox();
+  await mp.touchscreen.tap(flagCell.x + flagCell.width / 2, flagCell.y + flagCell.height / 2);
+  await mp.waitForTimeout(200);
+  check('a tap in flag mode plants a flag', (await mp.locator('.cell.is-flagged').count()) === 1);
+  check('a tap in flag mode reveals nothing', (await mp.locator('.cell.is-revealed').count()) === 0);
+
+  await mp.touchscreen.tap(flagCell.x + flagCell.width / 2, flagCell.y + flagCell.height / 2);
+  await mp.waitForTimeout(200);
+  check('tapping a flag again removes it', (await mp.locator('.cell.is-flagged').count()) === 0);
+
+  // long press is always the opposite action
+  const cdp2 = await ctxMobile.newCDPSession(mp);
+  const digTarget = await mp.locator('.cell').nth(40).boundingBox();
+  await cdp2.send('Input.dispatchTouchEvent', {
+    type: 'touchStart',
+    touchPoints: [{ x: digTarget.x + digTarget.width / 2, y: digTarget.y + digTarget.height / 2 }]
+  });
+  await mp.waitForTimeout(700);
+  await cdp2.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await mp.waitForTimeout(250);
+  check('a long press in flag mode digs instead', (await mp.locator('.cell.is-revealed').count()) > 0);
+  check('a long press in flag mode plants no flag', (await mp.locator('.cell.is-flagged').count()) === 0);
+
+  await mp.locator('#mode-dig').click();
+  await mp.waitForTimeout(150);
+  check('switching back to dig mode clears the board hint',
+    !(await mp.locator('#board').evaluate((b) => b.classList.contains('is-flagmode'))));
+
+  /* ------------------------------------------------------ installable */
+  console.log('\ninstallable / offline');
+  const manifestHref = await mp.getAttribute('link[rel="manifest"]', 'href');
+  check('a web app manifest is linked', !!manifestHref);
+  const manifest = await mp.evaluate(async (href) => {
+    const res = await fetch(href);
+    return res.ok ? res.json() : null;
+  }, manifestHref);
+  check('the manifest parses as JSON', !!manifest);
+  check('the manifest is standalone', manifest && manifest.display === 'standalone');
+  check('the manifest uses relative start_url and scope',
+    manifest && manifest.start_url === './' && manifest.scope === './');
+  check('the manifest has a 512px icon',
+    !!(manifest && manifest.icons.some((i) => i.sizes === '512x512')));
+  check('the manifest has a maskable icon',
+    !!(manifest && manifest.icons.some((i) => (i.purpose || '').includes('maskable'))));
+  const iconsOk = await mp.evaluate(async (icons) => {
+    for (const icon of icons) {
+      const res = await fetch(icon.src);
+      if (!res.ok) return false;
+    }
+    return true;
+  }, manifest.icons);
+  check('every manifest icon actually resolves', iconsOk);
+  check('an apple-touch-icon is provided for iOS',
+    !!(await mp.getAttribute('link[rel="apple-touch-icon"]', 'href')));
+  check('theme-color is set for both colour schemes',
+    (await mp.locator('meta[name="theme-color"]').count()) === 2);
+
+  await mp.evaluate(() => navigator.serviceWorker.ready);
+  check('the service worker takes control', await mp.evaluate(() => !!navigator.serviceWorker.controller));
+
+  await ctxMobile.setOffline(true);
+  await mp.reload();
+  await mp.waitForSelector('.cell', { timeout: 5000 }).catch(() => {});
+  check('the game still loads with no connection', (await mp.locator('.cell').count()) === 81);
+  check('styles survive offline too', await mp.evaluate(() =>
+    getComputedStyle(document.querySelector('.board')).display === 'grid'));
+  await mp.locator('.cell').nth(40).click();
+  await mp.waitForTimeout(200);
+  check('the game is playable offline', (await mp.locator('.cell.is-revealed').count()) > 0);
+  await ctxMobile.setOffline(false);
+
+  /* -------------------------------------------------- landscape phones */
+  console.log('\nlandscape');
+  const land = await browser.newContext({
+    viewport: { width: 844, height: 390 },
+    isMobile: true,
+    hasTouch: true,
+    deviceScaleFactor: 2
+  });
+  const lp = await land.newPage();
+  await lp.goto(URL);
+  await lp.waitForSelector('.cell');
+
+  const landscape = await lp.evaluate(() => {
+    const bar = document.querySelector('.actionbar');
+    const rect = bar.getBoundingClientRect();
+    const board = document.querySelector('#board').getBoundingClientRect();
+    const panel = document.querySelector('.panel').getBoundingClientRect();
+    return {
+      barFixed: getComputedStyle(bar).position === 'fixed',
+      barAtBottom: Math.abs(rect.bottom - window.innerHeight) <= 1,
+      panelSticky: getComputedStyle(document.querySelector('.panel')).position === 'sticky',
+      headerHidden: getComputedStyle(document.querySelector('.app__header')).display === 'none',
+      boardFitsHeight: board.bottom <= rect.top + 1 && board.top >= panel.bottom - 1,
+      cell: Math.round(document.querySelector('.cell').getBoundingClientRect().width)
+    };
+  });
+  // A landscape phone is wider than the phone breakpoint but far too short
+  // for the desktop layout, so it must still get the compact treatment.
+  check('a landscape phone keeps the fixed action bar', landscape.barFixed);
+  check('the landscape action bar sits at the bottom edge', landscape.barAtBottom);
+  check('the landscape status panel stays sticky', landscape.panelSticky);
+  check('the landscape header is hidden to save height', landscape.headerHidden);
+  check('the whole board fits between panel and bar in landscape', landscape.boardFitsHeight);
+  check('landscape cells stay tappable (>= 24px)', landscape.cell >= 24);
+  check('no horizontal overflow in landscape', (await lp.evaluate(() =>
+    document.documentElement.scrollWidth - document.documentElement.clientWidth)) <= 0);
+
   await browser.close();
   server.close();
   console.log(`\n${pass} passed, ${fail} failed`);

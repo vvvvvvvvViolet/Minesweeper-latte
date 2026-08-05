@@ -2,11 +2,22 @@
 <html lang="th">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-  <meta name="description" content="เกม Minesweeper เล่นบนเว็บ บันทึกเกมได้ ย้อนกลับตาที่เดินไปแล้วได้">
-  <meta name="theme-color" content="#c8a27a">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="description" content="เกม Minesweeper เล่นบนเว็บ บันทึกเกมได้ ย้อนกลับได้ เล่นบนมือถือได้เต็มจอ">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#f5ece1" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#221b17" media="(prefers-color-scheme: dark)">
+
+  <!-- Home-screen install on iOS and Android -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Minesweeper">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+
   <title>Minesweeper Latte</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💣</text></svg>">
   <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
@@ -15,6 +26,54 @@
       <h1 class="app__title">Minesweeper <span>Latte</span></h1>
       <p class="app__subtitle">กวาดทุ่นระเบิดแบบสบาย ๆ — บันทึกเกมได้ ย้อนกลับได้</p>
     </header>
+
+    <section class="panel" aria-label="สถานะเกม">
+      <div class="panel__stat" title="จำนวนระเบิดที่ยังไม่ได้ปักธง">
+        <span class="panel__icon" aria-hidden="true">💣</span>
+        <span class="panel__value" id="mine-count">000</span>
+      </div>
+      <button type="button" id="status-face" class="face" title="เริ่มเกมใหม่" aria-label="เริ่มเกมใหม่">🙂</button>
+      <div class="panel__stat" title="เวลาที่ใช้ (วินาที)">
+        <span class="panel__icon" aria-hidden="true">⏱️</span>
+        <span class="panel__value" id="timer">000</span>
+      </div>
+    </section>
+
+    <p class="message" id="message" role="status" aria-live="polite"></p>
+
+    <div class="board-wrap">
+      <div id="board" class="board" role="grid" tabindex="-1"></div>
+    </div>
+
+    <!-- Fixed to the bottom of the screen on phones, so every control sits
+         inside comfortable thumb reach. -->
+    <nav class="actionbar" aria-label="การกระทำ">
+      <div class="mode" role="group" aria-label="โหมดการแตะ">
+        <button type="button" id="mode-dig" class="mode__btn is-active" aria-pressed="true"
+                title="แตะเพื่อเปิดช่อง">
+          <span class="mode__icon" aria-hidden="true">⛏️</span>
+          <span class="mode__label">เปิด</span>
+        </button>
+        <button type="button" id="mode-flag" class="mode__btn" aria-pressed="false"
+                title="แตะเพื่อปักธง">
+          <span class="mode__icon" aria-hidden="true">🚩</span>
+          <span class="mode__label">ปักธง</span>
+        </button>
+      </div>
+
+      <button type="button" id="undo-btn" class="actionbar__btn" title="ย้อนกลับตาล่าสุด (Ctrl+Z)">
+        <span class="actionbar__icon" aria-hidden="true">↩︎</span>
+        <span class="actionbar__label">ย้อนกลับ<b id="undo-count" class="actionbar__badge"></b></span>
+      </button>
+      <button type="button" id="save-btn" class="actionbar__btn" title="บันทึกเกม (Ctrl+S)">
+        <span class="actionbar__icon" aria-hidden="true">💾</span>
+        <span class="actionbar__label">บันทึก</span>
+      </button>
+      <button type="button" id="load-btn" class="actionbar__btn" title="โหลดเกมที่บันทึกไว้">
+        <span class="actionbar__icon" aria-hidden="true">📂</span>
+        <span class="actionbar__label">โหลด</span>
+      </button>
+    </nav>
 
     <section class="controls" aria-label="ตั้งค่าเกม">
       <div class="controls__row">
@@ -29,63 +88,42 @@
       <div class="controls__row custom" id="custom-fields" hidden>
         <label class="field field--sm">
           <span class="field__label">แถว</span>
-          <input type="number" id="custom-rows" class="field__input" value="12" min="5" max="30">
+          <input type="number" id="custom-rows" class="field__input" value="12" min="5" max="30"
+                 inputmode="numeric">
         </label>
         <label class="field field--sm">
           <span class="field__label">คอลัมน์</span>
-          <input type="number" id="custom-cols" class="field__input" value="12" min="5" max="40">
+          <input type="number" id="custom-cols" class="field__input" value="12" min="5" max="40"
+                 inputmode="numeric">
         </label>
         <label class="field field--sm">
           <span class="field__label">ระเบิด</span>
-          <input type="number" id="custom-mines" class="field__input" value="25" min="1" max="500">
+          <input type="number" id="custom-mines" class="field__input" value="25" min="1" max="500"
+                 inputmode="numeric">
         </label>
         <button type="button" id="custom-apply" class="btn btn--primary">สร้างกระดาน</button>
       </div>
     </section>
-
-    <section class="panel" aria-label="สถานะเกม">
-      <div class="panel__stat" title="จำนวนระเบิดที่ยังไม่ได้ปักธง">
-        <span class="panel__icon" aria-hidden="true">💣</span>
-        <span class="panel__value" id="mine-count" aria-live="off">000</span>
-      </div>
-      <button type="button" id="status-face" class="face" title="เริ่มเกมใหม่" aria-label="เริ่มเกมใหม่">🙂</button>
-      <div class="panel__stat" title="เวลาที่ใช้ (วินาที)">
-        <span class="panel__icon" aria-hidden="true">⏱️</span>
-        <span class="panel__value" id="timer">000</span>
-      </div>
-    </section>
-
-    <section class="actions" aria-label="การกระทำ">
-      <button type="button" id="undo-btn" class="btn btn--accent" title="ย้อนกลับตาล่าสุด (Ctrl+Z)">
-        ↩︎ ย้อนกลับ <span id="undo-count" class="btn__badge"></span>
-      </button>
-      <button type="button" id="save-btn" class="btn" title="บันทึกเกม (Ctrl+S)">💾 บันทึก</button>
-      <button type="button" id="load-btn" class="btn" title="โหลดเกมที่บันทึกไว้">📂 โหลด</button>
-    </section>
-
-    <p class="message" id="message" role="status" aria-live="polite"></p>
-
-    <div class="board-wrap">
-      <div id="board" class="board" role="grid" tabindex="-1"></div>
-    </div>
 
     <section class="best" aria-label="สถิติเวลาที่ดีที่สุด">
       <span class="best__label">สถิติดีที่สุด</span>
       <div class="best__values" id="best-times"></div>
     </section>
 
-    <section class="help">
-      <h2>วิธีเล่น</h2>
-      <ul>
-        <li><strong>คลิกซ้าย</strong> เปิดช่อง — ช่องแรกที่กดจะไม่มีระเบิดเสมอ</li>
-        <li><strong>คลิกขวา</strong> (หรือ <strong>กดค้าง</strong> บนมือถือ) ปักธง 🚩</li>
-        <li><strong>ดับเบิลคลิก</strong> หรือคลิกกลางบนตัวเลขที่ปักธงครบแล้ว เพื่อเปิดช่องรอบ ๆ พร้อมกัน</li>
+    <details class="help" id="help">
+      <summary class="help__summary">วิธีเล่น</summary>
+      <ul class="help__list">
+        <li><strong>แตะ</strong> เปิดช่อง — ช่องแรกที่กดจะไม่มีระเบิดเสมอ</li>
+        <li><strong>สลับโหมดเป็น 🚩</strong> แล้วแตะเพื่อปักธง หรือ <strong>กดค้าง</strong> เพื่อสลับการทำงานชั่วคราว</li>
+        <li>บนคอมพิวเตอร์ <strong>คลิกขวา</strong> ปักธงได้เลย</li>
+        <li><strong>แตะตัวเลขที่ปักธงครบแล้ว</strong> เพื่อเปิดช่องรอบ ๆ พร้อมกัน</li>
         <li><strong>ย้อนกลับ</strong> ถอยได้สูงสุด 40 ตา รวมถึงตาที่เหยียบระเบิด (ปุ่มลัด Ctrl+Z)</li>
-        <li><strong>บันทึก</strong> เก็บได้ 3 ช่อง และเกมค้างจะถูกบันทึกอัตโนมัติเมื่อปิดหน้าเว็บ</li>
-        <li>ปุ่มลูกศรเลื่อนช่อง, <strong>Enter/Space</strong> เปิดช่อง, <strong>F</strong> ปักธง</li>
+        <li><strong>บันทึก</strong> เก็บได้ 3 ช่อง และเกมค้างจะถูกบันทึกอัตโนมัติทุกตา</li>
+        <li>คีย์บอร์ด: ลูกศรเลื่อนช่อง, <strong>Enter/Space</strong> เปิดช่อง, <strong>F</strong> ปักธง</li>
+        <li>เพิ่มลงหน้าจอโฮมได้ เล่นเต็มจอและเล่นตอนออฟไลน์ได้</li>
       </ul>
       <p class="help__note">หมายเหตุ: เกมที่ใช้ปุ่มย้อนกลับจะไม่ถูกบันทึกเป็นสถิติเวลา</p>
-    </section>
+    </details>
   </div>
 
   <div class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" hidden>
