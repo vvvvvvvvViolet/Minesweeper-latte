@@ -360,6 +360,12 @@ body {
   touch-action: manipulation;
 }
 
+/*
+ * Rows exist only to satisfy the grid/row/gridcell ARIA structure; they must
+ * not become layout boxes, or the cells would stop being CSS-grid items.
+ */
+.board__row { display: contents; }
+
 /* Boards wider than 20 columns shrink a little so more fits on screen. */
 .board--wide { --cell: 28px; }
 

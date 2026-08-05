@@ -223,8 +223,8 @@
       var isRecord = Storage.recordBestTime(game.difficulty, seconds, undoUsed === 0);
       renderBestTimes();
       setMessage(isRecord
-        ? 'ชนะแล้ว! สถิติใหม่ ' + seconds + ' วินาที 🎉'
-        : 'ชนะแล้ว! ใช้เวลา ' + seconds + ' วินาที' + (undoUsed ? ' (ใช้ย้อนกลับ ' + undoUsed + ' ครั้ง)' : ''));
+        ? 'ชนะแล้ว! สถิติใหม่ ' + formatClock(seconds) + ' นาที 🎉'
+        : 'ชนะแล้ว! ใช้เวลา ' + formatClock(seconds) + ' นาที' + (undoUsed ? ' (ใช้ย้อนกลับ ' + undoUsed + ' ครั้ง)' : ''));
     } else {
       setMessage('เหยียบระเบิด! กด "ย้อนกลับ" เพื่อแก้ตาล่าสุด หรือเริ่มเกมใหม่');
     }
@@ -248,18 +248,28 @@
 
     var frag = document.createDocumentFragment();
     for (var r = 0; r < game.rows; r++) {
+      // role="grid" requires rows between the grid and its cells. The wrapper
+      // uses display: contents so the cells stay direct CSS-grid items.
+      var row = document.createElement('div');
+      row.className = 'board__row';
+      row.setAttribute('role', 'row');
+      row.setAttribute('aria-rowindex', r + 1);
+
       for (var c = 0; c < game.cols; c++) {
         var cell = document.createElement('button');
         var idx = r * game.cols + c;
         cell.type = 'button';
         cell.className = 'cell';
+        cell.setAttribute('role', 'gridcell');
+        cell.setAttribute('aria-colindex', c + 1);
         cell.dataset.index = idx;
         cell.dataset.row = r;
         cell.dataset.col = c;
         cell.tabIndex = idx === 0 ? 0 : -1;
-        frag.appendChild(cell);
+        row.appendChild(cell);
         cells.push(cell);
       }
+      frag.appendChild(row);
     }
     el.board.appendChild(frag);
   }
@@ -331,7 +341,7 @@
       chip.appendChild(name);
 
       var time = document.createElement('b');
-      time.textContent = value == null ? '—' : value + ' วิ';
+      time.textContent = value == null ? '—' : formatClock(value);
       chip.appendChild(time);
 
       el.bestTimes.appendChild(chip);
@@ -352,10 +362,21 @@
     }, 2200);
   }
 
+  /** Mine counter: three digits, clamped, because it cannot outgrow the board. */
   function pad3(n) {
     var sign = n < 0 ? '-' : '';
     var abs = Math.min(999, Math.abs(n));
     return sign + ('00' + abs).slice(-3);
+  }
+
+  /**
+   * Durations as m:ss. A hard board easily runs past the 999 seconds that a
+   * three-digit counter can show, so the clock must not be clamped.
+   */
+  function formatClock(seconds) {
+    seconds = Math.max(0, Math.floor(seconds));
+    var minutes = Math.floor(seconds / 60);
+    return minutes + ':' + ('0' + (seconds % 60)).slice(-2);
   }
 
   /* --------------------------------------------------------------- timer */
@@ -386,7 +407,7 @@
   }
 
   function updateTimerDisplay() {
-    el.timer.textContent = pad3(Math.floor(elapsedMs() / 1000));
+    el.timer.textContent = formatClock(elapsedMs() / 1000);
   }
 
   /* -------------------------------------------------------------- inputs */
@@ -667,7 +688,7 @@
     var name = preset ? preset.label : 'กำหนดเอง';
     var status = snap.status === 'won' ? 'ชนะแล้ว' : snap.status === 'lost' ? 'แพ้แล้ว' : 'กำลังเล่น';
     var seconds = Math.floor((data.elapsed || 0) / 1000);
-    return name + ' ' + snap.rows + '×' + snap.cols + ' · ' + status + ' · ' + seconds + ' วิ · ' + formatDate(data.savedAt);
+    return name + ' ' + snap.rows + '×' + snap.cols + ' · ' + status + ' · ' + formatClock(seconds) + ' · ' + formatDate(data.savedAt);
   }
 
   function formatDate(ts) {
@@ -682,6 +703,12 @@
     getGame: function () { return game; },
     getHistoryLength: function () { return history.length; },
     startGame: startGame,
-    undo: undo
+    undo: undo,
+    /** Winds the clock forward so long-game formatting can be tested. */
+    setElapsedForTest: function (ms) {
+      stopTimer();
+      timer.accumulated = ms;
+      updateTimerDisplay();
+    }
   };
 })(typeof window !== 'undefined' ? window : this);

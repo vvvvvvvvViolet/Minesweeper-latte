@@ -42,6 +42,18 @@ jobs:
           # Turns Pages on for the repository if it is not enabled yet.
           enablement: true
 
+      # Stamps the commit into the service worker cache name so a deploy always
+      # invalidates the old cache. Without it, a forgotten manual bump serves
+      # the new HTML alongside stale cached CSS/JS.
+      - name: Stamp the service worker cache version
+        run: |
+          sed -i "s/^var CACHE_VERSION = '[^']*';/var CACHE_VERSION = '${GITHUB_SHA}';/" sw.js
+          grep -q "^var CACHE_VERSION = '${GITHUB_SHA}';" sw.js || {
+            echo "::error::Could not stamp CACHE_VERSION - has the declaration in sw.js changed?"
+            exit 1
+          }
+          grep '^var CACHE_VERSION' sw.js
+
       - name: Upload site
         uses: actions/upload-pages-artifact@v3
         with:
