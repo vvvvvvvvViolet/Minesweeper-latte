@@ -23,6 +23,7 @@
 
   function init() {
     cacheElements();
+    populateDifficulties();
     bindEvents();
 
     var auto = Storage.loadAuto();
@@ -32,7 +33,6 @@
     } else {
       startGame('beginner');
     }
-    renderBestTimes();
   }
 
   function cacheElements() {
@@ -48,6 +48,24 @@
 
   function camel(id) {
     return id.replace(/-([a-z])/g, function (_, ch) { return ch.toUpperCase(); });
+  }
+
+  /** Builds the difficulty menu from the presets, so the list lives in one place. */
+  function populateDifficulties() {
+    MS.PRESET_ORDER.forEach(function (key) {
+      var preset = MS.DIFFICULTIES[key];
+      var option = document.createElement('option');
+      option.value = key;
+      option.textContent = preset.label + ' · ' + preset.rows + '×' + preset.cols +
+        ' · ' + preset.mines + ' ลูก';
+      el.difficulty.appendChild(option);
+    });
+
+    var custom = document.createElement('option');
+    custom.value = 'custom';
+    custom.textContent = 'กำหนดเอง';
+    el.difficulty.appendChild(custom);
+    el.difficulty.value = 'beginner';
   }
 
   function bindEvents() {
@@ -106,6 +124,7 @@
     resetTimer();
     buildBoard();
     render();
+    renderBestTimes();
     Storage.clearAuto();
     setMessage('คลิกช่องไหนก็ได้เพื่อเริ่ม — ช่องแรกปลอดภัยเสมอ');
   }
@@ -186,6 +205,8 @@
     cells = [];
     el.board.style.setProperty('--cols', game.cols);
     el.board.style.setProperty('--rows', game.rows);
+    // Wide boards get smaller cells so they need less sideways scrolling.
+    el.board.classList.toggle('board--wide', game.cols > 20);
     el.board.setAttribute('aria-rowcount', game.rows);
     el.board.setAttribute('aria-colcount', game.cols);
 
@@ -260,12 +281,25 @@
 
   function renderBestTimes() {
     var best = Storage.getBestTimes();
-    var parts = [];
-    ['beginner', 'intermediate', 'expert'].forEach(function (key) {
+    el.bestTimes.innerHTML = '';
+
+    MS.PRESET_ORDER.forEach(function (key) {
       var value = best[key];
-      parts.push(MS.DIFFICULTIES[key].label + ': ' + (value == null ? '—' : value + ' วิ'));
+      var chip = document.createElement('span');
+      chip.className = 'best__item';
+      if (game && game.difficulty === key) chip.classList.add('is-current');
+
+      var name = document.createElement('span');
+      name.className = 'best__name';
+      name.textContent = MS.DIFFICULTIES[key].label;
+      chip.appendChild(name);
+
+      var time = document.createElement('b');
+      time.textContent = value == null ? '—' : value + ' วิ';
+      chip.appendChild(time);
+
+      el.bestTimes.appendChild(chip);
     });
-    el.bestTimes.textContent = parts.join('  ·  ');
   }
 
   function setMessage(text) {
@@ -493,6 +527,7 @@
 
     buildBoard();
     render();
+    renderBestTimes();
     if (game.status === 'playing') startTimer();
   }
 

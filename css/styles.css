@@ -241,15 +241,21 @@ body {
 
 /* -------------------------------------------------------------- board */
 
+/*
+ * Centring an overflowing child with `justify-content: center` makes its
+ * leading edge unreachable by scrolling, so wide boards lose their first
+ * columns. Auto margins centre when there is room and collapse to 0 when
+ * there is not, which scrolls correctly.
+ */
 .board-wrap {
-  overflow: auto;
-  display: flex;
-  justify-content: center;
+  overflow-x: auto;
   padding: 4px;
 }
 
 .board {
   --cols: 9;
+  width: max-content;
+  margin: 0 auto;
   display: grid;
   grid-template-columns: repeat(var(--cols), var(--cell));
   gap: 3px;
@@ -259,6 +265,9 @@ body {
   box-shadow: var(--shadow);
   touch-action: manipulation;
 }
+
+/* Boards wider than 20 columns shrink a little so more fits on screen. */
+.board--wide { --cell: 28px; }
 
 .cell {
   width: var(--cell);
@@ -347,9 +356,9 @@ body {
 .best {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 10px;
   justify-content: center;
-  align-items: baseline;
+  align-items: center;
   font-size: 14px;
 }
 
@@ -358,7 +367,33 @@ body {
   font-weight: 600;
 }
 
-.best__values { font-variant-numeric: tabular-nums; }
+.best__values {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.best__item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  background: var(--crema);
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 3px 12px;
+}
+
+.best__item.is-current {
+  border-color: var(--accent);
+  background: var(--bg);
+}
+
+.best__name {
+  color: var(--ink-soft);
+  font-size: 13px;
+}
 
 /* --------------------------------------------------------------- help */
 
@@ -509,12 +544,14 @@ body {
 
 @media (max-width: 720px) {
   :root { --cell: 30px; }
+  .board--wide { --cell: 26px; }
   body { padding: 16px 10px 40px; }
   .actions .btn { flex: 1 1 auto; }
 }
 
 @media (max-width: 480px) {
   :root { --cell: 26px; }
+  .board--wide { --cell: 24px; }
   .board { gap: 2px; padding: 6px; }
 }
 

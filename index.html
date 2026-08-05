@@ -20,12 +20,8 @@
       <div class="controls__row">
         <label class="field">
           <span class="field__label">ระดับความยาก</span>
-          <select id="difficulty" class="field__input">
-            <option value="beginner">ง่าย · 9×9 · 10 ลูก</option>
-            <option value="intermediate">ปานกลาง · 16×16 · 40 ลูก</option>
-            <option value="expert">ยาก · 16×30 · 99 ลูก</option>
-            <option value="custom">กำหนดเอง</option>
-          </select>
+          <!-- Options are generated from Minesweeper.DIFFICULTIES on load. -->
+          <select id="difficulty" class="field__input"></select>
         </label>
         <button type="button" id="new-btn" class="btn btn--primary">เกมใหม่</button>
       </div>
@@ -75,7 +71,7 @@
 
     <section class="best" aria-label="สถิติเวลาที่ดีที่สุด">
       <span class="best__label">สถิติดีที่สุด</span>
-      <span class="best__values" id="best-times">—</span>
+      <div class="best__values" id="best-times"></div>
     </section>
 
     <section class="help">

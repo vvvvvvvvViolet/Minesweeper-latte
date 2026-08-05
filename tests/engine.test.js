@@ -19,6 +19,50 @@ function check(name, cond) {
 
 console.log('Minesweeper Latte - engine tests\n');
 
+// 0. difficulty presets
+{
+  const order = MS.PRESET_ORDER;
+  check('five difficulty presets are exposed', order.length === 5);
+  check('every preset in the order exists', order.every(k => !!MS.DIFFICULTIES[k]));
+  check('no preset is missing from the order',
+    Object.keys(MS.DIFFICULTIES).every(k => order.indexOf(k) !== -1));
+  check('every preset has a label', order.every(k => !!MS.DIFFICULTIES[k].label));
+  check('no duplicate labels', new Set(order.map(k => MS.DIFFICULTIES[k].label)).size === 5);
+
+  const size = k => MS.DIFFICULTIES[k].rows * MS.DIFFICULTIES[k].cols;
+  const density = k => MS.DIFFICULTIES[k].mines / size(k);
+  let growing = true, denser = true, fits = true, playable = true;
+  for (let i = 0; i < order.length; i++) {
+    const d = MS.DIFFICULTIES[order[i]];
+    if (i > 0) {
+      if (size(order[i]) <= size(order[i - 1])) growing = false;
+      if (density(order[i]) <= density(order[i - 1])) denser = false;
+    }
+    // presets must survive Game's clamping untouched
+    if (d.rows < MS.LIMITS.minRows || d.rows > MS.LIMITS.maxRows ||
+        d.cols < MS.LIMITS.minCols || d.cols > MS.LIMITS.maxCols) fits = false;
+    const g = new MS.Game({ rows: d.rows, cols: d.cols, mines: d.mines, difficulty: order[i] });
+    if (g.rows !== d.rows || g.cols !== d.cols || g.mines !== d.mines) playable = false;
+  }
+  check('presets grow in board size', growing);
+  check('presets grow in mine density', denser);
+  check('presets stay inside the size limits', fits);
+  check('no preset is altered by clamping', playable);
+
+  // each preset must be winnable end to end
+  let allWon = true;
+  for (const key of order) {
+    const d = MS.DIFFICULTIES[key];
+    const g = new MS.Game({ rows: d.rows, cols: d.cols, mines: d.mines, difficulty: key });
+    g.reveal(Math.floor(d.rows / 2), Math.floor(d.cols / 2));
+    for (let r = 0; r < d.rows; r++) for (let c = 0; c < d.cols; c++) {
+      if (!g.mineAt[r * d.cols + c]) g.reveal(r, c);
+    }
+    if (g.status !== 'won' || g.flagCount !== d.mines) allWon = false;
+  }
+  check('every preset can be played to a win', allWon);
+}
+
 // 1. first click safe, always
 for (let i = 0; i < 300; i++) {
   const g = new MS.Game({rows:9, cols:9, mines:10, difficulty:'beginner'});
@@ -123,22 +167,45 @@ for (let i = 0; i < 300; i++) {
 
 // 9. chording
 {
-  const g = new MS.Game({rows:9,cols:9,mines:10});
-  g.reveal(4,4);
-  let done = false;
-  for (let r=0;r<9 && !done;r++) for (let c=0;c<9 && !done;c++) {
-    const i=r*9+c;
-    if (g.state[i] !== MS.REVEALED || g.adjacent[i] === 0) continue;
-    check('chord blocked before flags placed', g.chord(r,c) === false);
-    // flag every adjacent mine then chord
-    for (let dr=-1;dr<=1;dr++) for (let dc=-1;dc<=1;dc++) {
-      const nr=r+dr,nc=c+dc; if(nr<0||nr>=9||nc<0||nc>=9) continue;
-      if (g.mineAt[nr*9+nc] && g.state[nr*9+nc]===MS.HIDDEN) g.toggleFlag(nr,nc);
+  const N = 9;
+  const around = (r, c, fn) => {
+    for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+      if (!dr && !dc) continue;
+      const nr = r + dr, nc = c + dc;
+      if (nr < 0 || nr >= N || nc < 0 || nc >= N) continue;
+      fn(nr, nc, nr * N + nc);
     }
+  };
+
+  // A chord only opens cells, so the candidate needs at least one hidden
+  // non-mine neighbour. Boards where no such cell exists are retried.
+  let g = null, target = null;
+  for (let attempt = 0; attempt < 50 && !target; attempt++) {
+    g = new MS.Game({ rows: N, cols: N, mines: 10 });
+    g.reveal(4, 4);
+    for (let r = 0; r < N && !target; r++) for (let c = 0; c < N && !target; c++) {
+      const i = r * N + c;
+      if (g.state[i] !== MS.REVEALED || g.adjacent[i] === 0) continue;
+      let openable = 0;
+      around(r, c, (nr, nc, ni) => {
+        if (g.state[ni] === MS.HIDDEN && !g.mineAt[ni]) openable++;
+      });
+      if (openable > 0) target = [r, c];
+    }
+  }
+  check('found a chordable cell', !!target);
+
+  if (target) {
+    const [r, c] = target;
+    check('chord blocked before flags placed', g.chord(r, c) === false);
+    around(r, c, (nr, nc, ni) => {
+      if (g.mineAt[ni] && g.state[ni] === MS.HIDDEN) g.toggleFlag(nr, nc);
+    });
     const before = g.revealedCount;
-    check('chord opens neighbours once flags match', g.chord(r,c) === true && g.revealedCount > before);
+    check('chord opens neighbours once flags match', g.chord(r, c) === true);
+    check('chord actually revealed cells', g.revealedCount > before);
     check('chord did not lose the game', g.status !== 'lost');
-    done = true;
+    check('chord is a no-op when nothing is left to open', g.chord(r, c) === false);
   }
 }
 

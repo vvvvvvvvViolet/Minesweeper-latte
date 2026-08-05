@@ -11,11 +11,18 @@
 
   var STATE_CHARS = ['h', 'r', 'f'];
 
+  // Five presets, rising in both board size and mine density
+  // (10% -> 12% -> 16% -> 21% -> 23%).
   var DIFFICULTIES = {
+    novice: { rows: 7, cols: 7, mines: 5, label: 'มือใหม่' },
     beginner: { rows: 9, cols: 9, mines: 10, label: 'ง่าย' },
     intermediate: { rows: 16, cols: 16, mines: 40, label: 'ปานกลาง' },
-    expert: { rows: 16, cols: 30, mines: 99, label: 'ยาก' }
+    expert: { rows: 16, cols: 30, mines: 99, label: 'ยาก' },
+    nightmare: { rows: 20, cols: 40, mines: 180, label: 'โหด' }
   };
+
+  // Display order for the difficulty menu and the best-time list.
+  var PRESET_ORDER = ['novice', 'beginner', 'intermediate', 'expert', 'nightmare'];
 
   var LIMITS = { minRows: 5, maxRows: 30, minCols: 5, maxCols: 40 };
 
@@ -347,6 +354,7 @@
     REVEALED: REVEALED,
     FLAGGED: FLAGGED,
     DIFFICULTIES: DIFFICULTIES,
+    PRESET_ORDER: PRESET_ORDER,
     LIMITS: LIMITS,
     clamp: clamp
   };

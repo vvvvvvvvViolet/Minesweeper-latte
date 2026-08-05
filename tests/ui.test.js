@@ -54,6 +54,18 @@ function serve() {
   await page.goto(URL);
   await page.waitForSelector('.cell');
 
+  check('difficulty menu lists 5 presets plus custom',
+    (await page.locator('#difficulty option').count()) === 6);
+  check('the menu is generated in preset order', (await page.evaluate(() =>
+    [...document.querySelectorAll('#difficulty option')].map((o) => o.value).join(',')))
+    === 'novice,beginner,intermediate,expert,nightmare,custom');
+  check('preset options show size and mine count',
+    /มือใหม่ · 7×7 · 5 ลูก/.test(await page.locator('#difficulty option').first().textContent()));
+  check('beginner is selected by default', (await page.locator('#difficulty').inputValue()) === 'beginner');
+  check('best-time list shows one chip per preset', (await page.locator('.best__item').count()) === 5);
+  check('the current difficulty chip is highlighted',
+    (await page.locator('.best__item.is-current').count()) === 1);
+
   check('board renders 81 cells for beginner', (await page.locator('.cell').count()) === 81);
   check('mine counter shows 010', (await page.locator('#mine-count').textContent()) === '010');
   check('undo disabled at start', await page.locator('#undo-btn').isDisabled());
@@ -157,6 +169,71 @@ function serve() {
   await page.waitForTimeout(1200);
   check('timer resumes after undoing a loss',
     Number(await page.locator('#timer').textContent()) > Number(timerAtLoss));
+
+  /* --------------------------------------------------- all five levels */
+  console.log('\ndifficulty levels');
+  const expected = {
+    novice: { cells: 49, mines: '005' },
+    beginner: { cells: 81, mines: '010' },
+    intermediate: { cells: 256, mines: '040' },
+    expert: { cells: 480, mines: '099' },
+    nightmare: { cells: 800, mines: '180' }
+  };
+  for (const [key, want] of Object.entries(expected)) {
+    await page.selectOption('#difficulty', key);
+    await page.waitForTimeout(200);
+    check(`${key} builds ${want.cells} cells`, (await page.locator('.cell').count()) === want.cells);
+    check(`${key} shows ${want.mines} mines`, (await page.locator('#mine-count').textContent()) === want.mines);
+    check(`${key} highlights its own best-time chip`, await page.evaluate((k) => {
+      const chip = document.querySelector('.best__item.is-current');
+      return !!chip && chip.textContent.includes(window.Minesweeper.DIFFICULTIES[k].label);
+    }, key));
+    check(`${key} first click is safe`, await (async () => {
+      const g = await page.evaluate(() => {
+        const cells = [...document.querySelectorAll('.cell')];
+        cells[Math.floor(cells.length / 2)].click();
+        return window.MinesweeperApp.getGame().status;
+      });
+      return g !== 'lost';
+    })());
+  }
+  check('the widest board uses the compact cell size',
+    await page.locator('#board').evaluate((b) => b.classList.contains('board--wide')));
+  check('nightmare still fits the page width without body overflow', (await page.evaluate(() =>
+    document.documentElement.scrollWidth - document.documentElement.clientWidth)) <= 0);
+
+  // Centring an overflowing child would make its first columns unreachable.
+  const wide = await page.evaluate(() => {
+    const wrap = document.querySelector('.board-wrap');
+    const board = document.querySelector('#board');
+    wrap.scrollLeft = 0;
+    const firstCellLeft = document.querySelector('.cell').getBoundingClientRect().left;
+    return {
+      scrollable: wrap.scrollWidth >= board.getBoundingClientRect().width,
+      firstCellVisible: firstCellLeft >= wrap.getBoundingClientRect().left - 1,
+      overflows: wrap.scrollWidth > wrap.clientWidth
+    };
+  });
+  check('the widest board overflows its wrapper', wide.overflows);
+  check('every column of the widest board is reachable by scrolling', wide.scrollable);
+  check('column 1 is visible at scroll position 0', wide.firstCellVisible);
+
+  const lastCellVisible = await page.evaluate(() => {
+    const wrap = document.querySelector('.board-wrap');
+    wrap.scrollLeft = wrap.scrollWidth;
+    const cells = document.querySelectorAll('.cell');
+    const last = cells[cells.length - 1].getBoundingClientRect();
+    return last.right <= wrap.getBoundingClientRect().right + 1;
+  });
+  check('the final column is reachable at full scroll', lastCellVisible);
+
+  await page.selectOption('#difficulty', 'novice');
+  await page.waitForTimeout(200);
+  check('a small board stays centred in its wrapper', await page.evaluate(() => {
+    const wrap = document.querySelector('.board-wrap').getBoundingClientRect();
+    const board = document.querySelector('#board').getBoundingClientRect();
+    return Math.abs((board.left - wrap.left) - (wrap.right - board.right)) < 2;
+  }));
 
   /* ------------------------------------------------- custom + keyboard */
   console.log('\ncustom boards and keyboard');
